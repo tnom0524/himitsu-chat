@@ -6,7 +6,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBOzUv70ioTMNbVVZxDusDXVwAKvwteosE",
   authDomain: "himitsuroom.firebaseapp.com",
   projectId: "himitsuroom",
-  storageBucket: "himitsuroom.firebasestorage.app",
+  storageBucket: "himitsuroom.appspot.com",
   messagingSenderId: "509991768131",
   appId: "1:509991768131:web:3c0077cd5bb32f6ac904f6",
   measurementId: "G-6XG1QJ5JHM"

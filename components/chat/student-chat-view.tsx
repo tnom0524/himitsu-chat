@@ -1,29 +1,70 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useChat } from "@/lib/chat-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { MessageBubble } from "./message-bubble"
-import { StampSelector } from "./stamp-selector"
-import { ArrowLeft, Send, Users, MessageCircle, User, GraduationCap } from "lucide-react"
+import { useState, useEffect } from "react";
+import { getMessages, sendMessage, Message } from "@/lib/chat";
+import { useChat } from "@/lib/chat-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { MessageBubble } from "./message-bubble";
+import { ArrowLeft, Send, Users, MessageCircle, User, GraduationCap } from "lucide-react";
 
 export function StudentChatView() {
-  const { currentUser, privateRooms, publicMessages, sendPrivateMessage, addStamp } = useChat()
-  const [newPrivateMessage, setNewPrivateMessage] = useState("")
+  const { currentUser } = useChat();
+  const [privateMessages, setPrivateMessages] = useState<Message[]>([]);
+  const [publicMessages, setPublicMessages] = useState<Message[]>([]);
+  const [newPrivateMessage, setNewPrivateMessage] = useState("");
 
-  if (!currentUser) return null
+  // 小部屋のメッセージをFirestoreからリアルタイムで取得
+  useEffect(() => {
+    // currentUserが存在しない場合は、何もせずに処理を終了
+    if (!currentUser) return;
 
-  const studentMessages = privateRooms[currentUser.id] || []
+    const smallRoomId = `small_room_with_${currentUser.id}`;
+    const unsubscribe = getMessages(
+      currentUser.classroomId,
+      smallRoomId,
+      (messages) => setPrivateMessages(messages)
+    );
+    
+    // クリーンアップ関数
+    return () => unsubscribe();
+  }, [currentUser]); // 👈 依存配列をcurrentUserに修正
+
+  // 大部屋のメッセージをFirestoreからリアルタイムで取得
+  useEffect(() => {
+    // currentUserが存在しない場合は、何もせずに処理を終了
+    if (!currentUser) return;
+
+    const largeRoomId = "large_room";
+    const unsubscribe = getMessages(
+      currentUser.classroomId,
+      largeRoomId,
+      (messages) => setPublicMessages(messages)
+    );
+    
+    // クリーンアップ関数
+    return () => unsubscribe();
+  }, [currentUser]); // 👈 依存配列をcurrentUserに修正
+
 
   const handleSendPrivateMessage = () => {
-    if (newPrivateMessage.trim()) {
-      sendPrivateMessage(currentUser.id, newPrivateMessage)
-      setNewPrivateMessage("")
+    if (newPrivateMessage.trim() && currentUser) {
+      const smallRoomId = `small_room_with_${currentUser.id}`;
+      sendMessage(currentUser.classroomId, smallRoomId, newPrivateMessage, currentUser.id);
+      setNewPrivateMessage("");
     }
+  };
+
+  // currentUserが存在しない場合は、ローディング表示などを出しても良い
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
@@ -40,7 +81,7 @@ export function StudentChatView() {
                 <MessageCircle className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="font-semibold text-lg">クラス {currentUser.classroom}</h1>
+                <h1 className="font-semibold text-lg">クラス {currentUser.classroomId}</h1>
                 <p className="text-sm text-muted-foreground">生徒として参加中</p>
               </div>
             </div>
@@ -63,23 +104,24 @@ export function StudentChatView() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">先生に直接質問できます</p>
           </div>
-
-          {/* Private Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
-              {studentMessages.map((message) => (
+              {privateMessages.map((message) => (
                 <MessageBubble
                   key={message.id}
-                  message={message}
+                  message={{ 
+                    id: message.id,
+                    content: message.text, 
+                    sender: message.senderId === currentUser.id ? 'student' : 'teacher', 
+                    timestamp: message.createdAt.toDate() 
+                  }}
                   currentUserRole="student"
-                  isOwnMessage={message.sender === "student"}
-                  senderName={message.sender === "teacher" ? "先生" : "あなた"}
+                  isOwnMessage={message.senderId === currentUser.id}
+                  senderName={message.senderId === currentUser.id ? "あなた" : "先生"}
                 />
               ))}
             </div>
           </ScrollArea>
-
-          {/* Private Message Input */}
           <div className="p-4 border-t border-border">
             <div className="flex gap-2">
               <Input
@@ -105,8 +147,6 @@ export function StudentChatView() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">先生からのお知らせ・スタンプで反応できます</p>
           </div>
-
-          {/* Public Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-6">
               {publicMessages.map((message) => (
@@ -119,21 +159,15 @@ export function StudentChatView() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-medium text-sm">先生</span>
                         <span className="text-xs text-muted-foreground">
-                          {message.timestamp.toLocaleTimeString("ja-JP", {
+                          {message.createdAt.toDate().toLocaleTimeString("ja-JP", {
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
                         </span>
                       </div>
-                      <div className="bg-card border border-border rounded-lg p-4">{message.content}</div>
+                      <div className="bg-card border border-border rounded-lg p-4">{message.text}</div>
                     </div>
                   </div>
-
-                  {/* Stamps */}
-                  <div className="ml-11 space-y-3">
-                    <StampSelector messageId={message.id} stamps={message.stamps} onStamp={addStamp} />
-                  </div>
-
                   <Separator className="my-4" />
                 </div>
               ))}

@@ -30,7 +30,7 @@ export default function ChatPage() {
         id: userId,
         name: userName,
         role,
-        classroom,
+        classroomId: classroom,
       })
     }
   }, [role, classroom, currentUser, setCurrentUser])

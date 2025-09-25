@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getMessages, sendMessage, Message } from "@/lib/chat";
 import { useChat } from "@/lib/chat-context";
 import { Button } from "@/components/ui/button";
@@ -16,26 +16,24 @@ export function StudentChatView() {
   const [privateMessages, setPrivateMessages] = useState<Message[]>([]);
   const [publicMessages, setPublicMessages] = useState<Message[]>([]);
   const [newPrivateMessage, setNewPrivateMessage] = useState("");
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // 小部屋のメッセージをFirestoreからリアルタイムで取得
+  // 小部屋のメッセージをリアルタイムで取得
   useEffect(() => {
-    // currentUserが存在しない場合は、何もせずに処理を終了
     if (!currentUser) return;
 
-    const smallRoomId = `small_room_with_${currentUser.id}`;
+    const smallRoomId = currentUser.id; // 小部屋のIDは生徒の匿名IDそのもの
     const unsubscribe = getMessages(
       currentUser.classroomId,
       smallRoomId,
       (messages) => setPrivateMessages(messages)
     );
     
-    // クリーンアップ関数
     return () => unsubscribe();
-  }, [currentUser]); // 👈 依存配列をcurrentUserに修正
+  }, [currentUser]);
 
-  // 大部屋のメッセージをFirestoreからリアルタイムで取得
+  // 大部屋のメッセージをリアルタイムで取得
   useEffect(() => {
-    // currentUserが存在しない場合は、何もせずに処理を終了
     if (!currentUser) return;
 
     const largeRoomId = "large_room";
@@ -45,20 +43,27 @@ export function StudentChatView() {
       (messages) => setPublicMessages(messages)
     );
     
-    // クリーンアップ関数
     return () => unsubscribe();
-  }, [currentUser]); // 👈 依存配列をcurrentUserに修正
+  }, [currentUser]);
 
+  // 新しいメッセージが来たら一番下まで自動スクロール
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTo({
+        top: scrollAreaRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [privateMessages]);
 
   const handleSendPrivateMessage = () => {
     if (newPrivateMessage.trim() && currentUser) {
-      const smallRoomId = `small_room_with_${currentUser.id}`;
+      const smallRoomId = currentUser.id;
       sendMessage(currentUser.classroomId, smallRoomId, newPrivateMessage, currentUser.id);
       setNewPrivateMessage("");
     }
   };
 
-  // currentUserが存在しない場合は、ローディング表示などを出しても良い
   if (!currentUser) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -104,7 +109,8 @@ export function StudentChatView() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">先生に直接質問できます</p>
           </div>
-          <ScrollArea className="flex-1 p-4">
+
+          <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
             <div className="space-y-4">
               {privateMessages.map((message) => (
                 <MessageBubble
@@ -122,6 +128,7 @@ export function StudentChatView() {
               ))}
             </div>
           </ScrollArea>
+
           <div className="p-4 border-t border-border">
             <div className="flex gap-2">
               <Input
@@ -147,6 +154,7 @@ export function StudentChatView() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">先生からのお知らせ・スタンプで反応できます</p>
           </div>
+
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-6">
               {publicMessages.map((message) => (
@@ -168,6 +176,7 @@ export function StudentChatView() {
                       <div className="bg-card border border-border rounded-lg p-4">{message.text}</div>
                     </div>
                   </div>
+                  {/* TODO: スタンプ機能の実装 */}
                   <Separator className="my-4" />
                 </div>
               ))}

@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { getStudentId } from "@/lib/auth"
+import { getClassroom, joinAsTeacher } from "@/lib/chat" // 👈 データベース操作関数をインポート
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,13 +15,51 @@ type Classroom = "A" | "B" | "C" | null
 export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState<Role>(null)
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false) // 👈 ローディング状態を追加
+  const router = useRouter()
 
-  const handleEnterClassroom = () => {
-    if (selectedRole && selectedClassroom) {
-      // Navigate to chat interface
-      window.location.href = `/chat?role=${selectedRole}&classroom=${selectedClassroom}`
+  // ▼▼▼ クラスルームに入る処理を、データベースと連携するように大幅に修正 ▼▼▼
+  const handleEnterClassroom = async () => {
+    if (!selectedRole || !selectedClassroom) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const classroomData = await getClassroom(selectedClassroom)
+      const teacherExists = classroomData && classroomData.teacherId
+
+      let userId = ""
+
+      if (selectedRole === "teacher") {
+        if (teacherExists) {
+          setError("このクラスには既に他の先生がいます。")
+          setIsLoading(false)
+          return
+        }
+        // 先生として入室し、データベースを更新
+        userId = `teacher_for_${selectedClassroom}`
+        await joinAsTeacher(selectedClassroom, userId)
+      } else { // role is student
+        if (!teacherExists) {
+          setError("このクラスにはまだ先生がいません。")
+          setIsLoading(false)
+          return
+        }
+        userId = getStudentId()
+      }
+
+      router.push(`/chat?role=${selectedRole}&classroom=${selectedClassroom}&id=${userId}`)
+
+    } catch (e) {
+      console.error("入室処理エラー:", e)
+      setError("エラーが発生しました。時間をおいて再度お試しください。")
+      setIsLoading(false)
     }
   }
+  // ▲▲▲
+
   const temporaryMemberCount = 28
 
   return (
@@ -55,8 +96,8 @@ export default function HomePage() {
                 >
                   <div className="text-2xl">クラス {classroom}</div>
                   <Badge variant="secondary" className="text-xs">
-                    {/* {Math.floor(Math.random() * 20) + 15}名 */}
-                    {temporaryMemberCount}名
+                    {/* TODO: 将来的にFirebaseから取得する */}
+                    - 名
                   </Badge>
                 </Button>
               ))}
@@ -96,14 +137,15 @@ export default function HomePage() {
         </Card>
 
         {/* Enter Button */}
-        <div className="flex justify-center">
+        <div className="text-center space-y-4">
+          {error && <p className="font-semibold text-red-500">{error}</p>}
           <Button
             size="lg"
             className="px-12 py-6 text-lg font-semibold"
-            disabled={!selectedRole || !selectedClassroom}
+            disabled={!selectedRole || !selectedClassroom || isLoading}
             onClick={handleEnterClassroom}
           >
-            クラスルームに入る
+            {isLoading ? "入室処理中..." : "クラスルームに入る"}
           </Button>
         </div>
 
@@ -130,5 +172,5 @@ export default function HomePage() {
         )}
       </div>
     </div>
-  )
+  );
 }

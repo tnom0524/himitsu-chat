@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useChat, User } from "@/lib/chat-context";
-import { getStudentsInClassroom, getMessages, sendMessage, Message } from "@/lib/chat";
+import { useChat } from "@/lib/chat-context";
+import { getPrivateRooms, getMessages, sendMessage, Message, PrivateRoomInfo } from "@/lib/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, Users, MessageCircle } from "lucide-react";
+import { Send } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
 import { cn } from "@/lib/utils";
 
@@ -14,35 +14,39 @@ export function TeacherChatView() {
   const { currentUser } = useChat();
   
   // State管理
-  const [students, setStudents] = useState<User[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
+  const [privateRooms, setPrivateRooms] = useState<PrivateRoomInfo[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  
   const [privateMessages, setPrivateMessages] = useState<Message[]>([]);
   const [publicMessages, setPublicMessages] = useState<Message[]>([]);
+  
   const [newPrivateMessage, setNewPrivateMessage] = useState("");
   const [newPublicMessage, setNewPublicMessage] = useState("");
 
-  // 1. クラスの生徒一覧を取得
+  // 1. クラスの小部屋一覧をリアルタイムで取得
   useEffect(() => {
     if (currentUser?.classroomId) {
-      getStudentsInClassroom(currentUser.classroomId).then(setStudents);
+      const unsubscribe = getPrivateRooms(currentUser.classroomId, setPrivateRooms);
+      return () => unsubscribe();
     }
   }, [currentUser]);
 
-  // 2. 最初に表示する生徒を選択
+  // 2. 最初に表示する小部屋を選択
   useEffect(() => {
-    if (students.length > 0 && !selectedStudent) {
-      setSelectedStudent(students[0]);
+    if (privateRooms.length > 0 && !selectedRoomId) {
+      setSelectedRoomId(privateRooms[0].id);
     }
-  }, [students, selectedStudent]);
+  }, [privateRooms, selectedRoomId]);
 
-  // 3. 選択された生徒とのメッセージをリアルタイムで取得
+  // 3. 選択された小部屋のメッセージをリアルタイムで取得
   useEffect(() => {
-    if (selectedStudent && currentUser?.classroomId) {
-      const smallRoomId = `small_room_with_${selectedStudent.id}`;
-      const unsubscribe = getMessages(currentUser.classroomId, smallRoomId, setPrivateMessages);
+    if (selectedRoomId && currentUser?.classroomId) {
+      const unsubscribe = getMessages(currentUser.classroomId, selectedRoomId, setPrivateMessages);
       return () => unsubscribe();
+    } else {
+      setPrivateMessages([]); // 部屋が選択されていない場合はメッセージを空にする
     }
-  }, [selectedStudent, currentUser?.classroomId]);
+  }, [selectedRoomId, currentUser?.classroomId]);
 
   // 4. 大部屋のメッセージをリアルタイムで取得
   useEffect(() => {
@@ -55,9 +59,8 @@ export function TeacherChatView() {
 
   // メッセージ送信処理
   const handleSendPrivateMessage = () => {
-    if (newPrivateMessage.trim() && currentUser && selectedStudent) {
-      const smallRoomId = `small_room_with_${selectedStudent.id}`;
-      sendMessage(currentUser.classroomId, smallRoomId, newPrivateMessage, currentUser.id);
+    if (newPrivateMessage.trim() && currentUser && selectedRoomId) {
+      sendMessage(currentUser.classroomId, selectedRoomId, newPrivateMessage, currentUser.id);
       setNewPrivateMessage("");
     }
   };
@@ -74,27 +77,28 @@ export function TeacherChatView() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      {/* Student List (Left Panel) */}
+      {/* Student/Room List (Left Panel) */}
       <div className="w-1/4 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-lg">生徒一覧 (クラス {currentUser.classroomId})</h2>
+          <h2 className="font-semibold text-lg">生徒とのチャット (クラス {currentUser.classroomId})</h2>
         </div>
         <ScrollArea>
-          {students.map((student) => (
+          {privateRooms.map((room) => (
             <div
-              key={student.id}
+              key={room.id}
               className={cn(
                 "p-4 cursor-pointer border-b border-border hover:bg-muted",
-                selectedStudent?.id === student.id && "bg-muted"
+                selectedRoomId === room.id && "bg-muted"
               )}
-              onClick={() => setSelectedStudent(student)}
+              onClick={() => setSelectedRoomId(room.id)}
             >
-              <p className="font-semibold">{student.name}</p>
-              <p className="text-sm text-muted-foreground truncate">
-                {/* TODO: 最後のメッセージを表示 */}
-              </p>
+              {/* 匿名なので、生徒IDを短くして表示 */}
+              <p className="font-semibold">生徒 {room.studentId.substring(0, 8)}</p>
             </div>
           ))}
+          {privateRooms.length === 0 && (
+            <p className="p-4 text-sm text-muted-foreground">まだ生徒からのメッセージはありません。</p>
+          )}
         </ScrollArea>
       </div>
 
@@ -103,7 +107,7 @@ export function TeacherChatView() {
         {/* Private Chat (Middle Panel) */}
         <div className="flex-1 border-r border-border flex flex-col">
           <div className="p-4 border-b border-border">
-            <h2 className="font-semibold">{selectedStudent ? `${selectedStudent.name}さんとのチャット` : "生徒を選択してください"}</h2>
+            <h2 className="font-semibold">{selectedRoomId ? `生徒 ${selectedRoomId.substring(0, 8)} とのチャット` : "生徒を選択してください"}</h2>
           </div>
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
@@ -118,7 +122,7 @@ export function TeacherChatView() {
                   }}
                   currentUserRole="teacher"
                   isOwnMessage={msg.senderId === currentUser.id}
-                  senderName={msg.senderId === currentUser.id ? "自分" : selectedStudent?.name || "生徒"}
+                  senderName={msg.senderId === currentUser.id ? "自分" : `生徒 ${selectedRoomId?.substring(0, 8)}`}
                 />
               ))}
             </div>
@@ -130,9 +134,9 @@ export function TeacherChatView() {
                 value={newPrivateMessage}
                 onChange={(e) => setNewPrivateMessage(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSendPrivateMessage()}
-                disabled={!selectedStudent}
+                disabled={!selectedRoomId}
               />
-              <Button onClick={handleSendPrivateMessage} disabled={!selectedStudent}>
+              <Button onClick={handleSendPrivateMessage} disabled={!selectedRoomId}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>

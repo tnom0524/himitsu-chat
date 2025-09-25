@@ -5,7 +5,6 @@ import { createContext, useContext, useState, ReactNode } from "react";
 // ユーザーの型定義
 export interface User {
   id: string;
-  name: string;
   role: "student" | "teacher";
   classroomId: "A" | "B" | "C";
 }

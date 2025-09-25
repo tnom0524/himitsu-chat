@@ -8,6 +8,9 @@ import {
   orderBy,
   Timestamp,
   DocumentData,
+  doc,
+  updateDoc,
+  getDoc,
   getDocs, // 👈 getDocs を追加
   where,    // 👈 where を追加
 } from "firebase/firestore";
@@ -81,4 +84,56 @@ export const sendMessage = async (
     senderId: senderId,
     createdAt: Timestamp.now(),
   });
+};
+
+// ▼▼▼ ここから下を追記 ▼▼▼
+
+// 小部屋の情報を表す型
+export interface PrivateRoomInfo {
+  id: string; // ルームID (生徒の匿名IDと同じ)
+  studentId: string;
+}
+
+/**
+ * 特定のクラスルームに存在する小部屋の一覧を取得する関数
+ * @param classroomId - クラスルームID
+ * @param callback - 小部屋一覧が更新されるたびに呼び出される関数
+ * @returns 購読を停止するための関数
+ */
+export const getPrivateRooms = (
+  classroomId: string,
+  callback: (rooms: PrivateRoomInfo[]) => void
+) => {
+  const roomsRef = collection(db, "classrooms", classroomId, "rooms");
+  // IDが "large_room" ではない、つまり小部屋だけをクエリする
+  const q = query(roomsRef, where("__name__", "!=", "large_room"));
+
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const rooms: PrivateRoomInfo[] = [];
+    querySnapshot.forEach((doc) => {
+      // ドキュメントIDが生徒のIDなので、それをそのまま利用
+      rooms.push({ id: doc.id, studentId: doc.id });
+    });
+    callback(rooms);
+});
+
+  return unsubscribe;
+};
+
+export const getClassroom = async (classroomId: string) => {
+  const roomRef = doc(db, "classrooms", classroomId);
+  const roomSnap = await getDoc(roomRef);
+  return roomSnap.exists() ? roomSnap.data() : null;
+};
+
+// 先生がクラスルームに入室する関数
+export const joinAsTeacher = async (classroomId: string, teacherId: string) => {
+  const roomRef = doc(db, "classrooms", classroomId);
+  await updateDoc(roomRef, { teacherId: teacherId });
+};
+
+// 先生がクラスルームから退出する関数（将来的に使う）
+export const leaveAsTeacher = async (classroomId: string) => {
+  const roomRef = doc(db, "classrooms", classroomId);
+  await updateDoc(roomRef, { teacherId: null });
 };

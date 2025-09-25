@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { useChat } from "@/lib/chat-context"
 import { StudentChatView } from "@/components/chat/student-chat-view"
@@ -8,39 +8,42 @@ import { TeacherChatView } from "@/components/chat/teacher-chat-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
-import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
-
 type Role = "student" | "teacher"
 type Classroom = "A" | "B" | "C"
 
 export default function ChatPage() {
   const searchParams = useSearchParams()
-  const role = searchParams.get("role") as Role
-  const classroom = searchParams.get("classroom") as Classroom
   const { currentUser, setCurrentUser } = useChat()
 
+  // ▼▼▼ URLパラメータからユーザー情報を取得し、Contextに設定する処理 ▼▼▼
   useEffect(() => {
-    if (role && classroom && !currentUser) {
-      // Set current user based on URL params
-      const userId = role === "teacher" ? "teacher1" : "student1"
-      const userName = role === "teacher" ? "先生" : "生徒"
+    const role = searchParams.get("role") as Role | null
+    const classroom = searchParams.get("classroom") as Classroom | null
+    const userId = searchParams.get("id") // 匿名IDを取得
 
+    // 必要な情報が揃っており、かつユーザーがまだ設定されていない場合のみ実行
+    if (role && classroom && userId && !currentUser) {
       setCurrentUser({
         id: userId,
-        name: userName,
+        // nameプロパティは不要になったので削除
         role,
-        classroomId: classroom,
+        classroomId: classroom, // 正しいプロパティ名に設定
       })
     }
-  }, [role, classroom, currentUser, setCurrentUser])
+  }, [searchParams, currentUser, setCurrentUser]) // 依存配列
+  // ▲▲▲
 
-  if (!role || !classroom) {
+  // ▼▼▼ URLパラメータが不足している場合のエラー表示 ▼▼▼
+  const role = searchParams.get("role")
+  const classroom = searchParams.get("classroom")
+  const userId = searchParams.get("id")
+
+  if (!role || !classroom || !userId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-muted-foreground">無効なアクセスです。</p>
+            <p className="text-muted-foreground">無効なアクセスです。情報が不足しています。</p>
             <Button className="mt-4" onClick={() => (window.location.href = "/")}>
               ホームに戻る
             </Button>
@@ -49,7 +52,9 @@ export default function ChatPage() {
       </div>
     )
   }
+  // ▲▲▲
 
+  // ユーザー情報がContextに設定されるまでのローディング表示
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -58,7 +63,8 @@ export default function ChatPage() {
     )
   }
 
-  if (role === "teacher") {
+  // ユーザーの役割に応じて、表示するコンポーネントを切り替える
+  if (currentUser.role === "teacher") {
     return <TeacherChatView />
   } else {
     return <StudentChatView />

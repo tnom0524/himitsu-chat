@@ -39,3 +39,29 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Temporary files and backups
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+*のコピー*
+
+# Build outputs
+dist/

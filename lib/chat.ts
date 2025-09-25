@@ -8,7 +8,10 @@ import {
   orderBy,
   Timestamp,
   DocumentData,
+  getDocs, // 👈 getDocs を追加
+  where,    // 👈 where を追加
 } from "firebase/firestore";
+import type { User } from "./chat-context"; // 👈 User 型をインポート
 
 // メッセージの型を定義
 export interface Message {
@@ -42,6 +45,19 @@ export const getMessages = (
   });
 
   return unsubscribe; // 後で監視を停止するためにunsubscribe関数を返す
+};
+
+export const getStudentsInClassroom = async (classroomId: string): Promise<User[]> => {
+  const usersRef = collection(db, "users");
+  const q = query(usersRef, where("classroomId", "==", classroomId), where("role", "==", "student"));
+  
+  const querySnapshot = await getDocs(q);
+  const students: User[] = [];
+  querySnapshot.forEach((doc) => {
+    students.push({ id: doc.id, ...doc.data() } as User);
+  });
+
+  return students;
 };
 
 /**

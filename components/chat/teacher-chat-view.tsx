@@ -1,19 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useChat } from "@/lib/chat-context";
-import { getPrivateRooms, getMessages, sendMessage, Message, PrivateRoomInfo } from "@/lib/chat";
+import { getPrivateRooms, getMessages, sendMessage, leaveAsTeacher, Message, PrivateRoomInfo } from "@/lib/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send } from "lucide-react";
+import { Send, LogOut, Users, MessageCircle } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import { GraduationCap } from "lucide-react";
 
 export function TeacherChatView() {
   const { currentUser } = useChat();
+  const router = useRouter();
   
-  // State管理
   const [privateRooms, setPrivateRooms] = useState<PrivateRoomInfo[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   
@@ -22,6 +25,9 @@ export function TeacherChatView() {
   
   const [newPrivateMessage, setNewPrivateMessage] = useState("");
   const [newPublicMessage, setNewPublicMessage] = useState("");
+
+  const privateScrollAreaRef = useRef<HTMLDivElement>(null);
+  const publicScrollAreaRef = useRef<HTMLDivElement>(null);
 
   // 1. クラスの小部屋一覧をリアルタイムで取得
   useEffect(() => {
@@ -44,7 +50,7 @@ export function TeacherChatView() {
       const unsubscribe = getMessages(currentUser.classroomId, selectedRoomId, setPrivateMessages);
       return () => unsubscribe();
     } else {
-      setPrivateMessages([]); // 部屋が選択されていない場合はメッセージを空にする
+      setPrivateMessages([]);
     }
   }, [selectedRoomId, currentUser?.classroomId]);
 
@@ -73,14 +79,37 @@ export function TeacherChatView() {
     }
   };
 
+  const handleLeaveRoom = async () => {
+    if (currentUser) {
+      await leaveAsTeacher(currentUser.classroomId);
+      router.push("/");
+    }
+  };
+  
+  // 自動スクロール処理
+  useEffect(() => {
+    if (privateScrollAreaRef.current) {
+      privateScrollAreaRef.current.scrollTo({ top: privateScrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [privateMessages]);
+
+  useEffect(() => {
+    if (publicScrollAreaRef.current) {
+      publicScrollAreaRef.current.scrollTo({ top: publicScrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [publicMessages]);
+
   if (!currentUser) return <div>読み込み中...</div>;
 
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* Student/Room List (Left Panel) */}
       <div className="w-1/4 border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-lg">生徒とのチャット (クラス {currentUser.classroomId})</h2>
+        <div className="p-4 border-b border-border flex justify-between items-center">
+          <h2 className="font-semibold text-lg">生徒とのチャット</h2>
+          <Button variant="ghost" size="icon" onClick={handleLeaveRoom} title="クラスルームから退出する">
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+          </Button>
         </div>
         <ScrollArea>
           {privateRooms.map((room) => (
@@ -92,7 +121,6 @@ export function TeacherChatView() {
               )}
               onClick={() => setSelectedRoomId(room.id)}
             >
-              {/* 匿名なので、生徒IDを短くして表示 */}
               <p className="font-semibold">生徒 {room.studentId.substring(0, 8)}</p>
             </div>
           ))}
@@ -109,7 +137,7 @@ export function TeacherChatView() {
           <div className="p-4 border-b border-border">
             <h2 className="font-semibold">{selectedRoomId ? `生徒 ${selectedRoomId.substring(0, 8)} とのチャット` : "生徒を選択してください"}</h2>
           </div>
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea className="flex-1 p-4" ref={privateScrollAreaRef}>
             <div className="space-y-4">
               {privateMessages.map((msg) => (
                 <MessageBubble
@@ -143,26 +171,38 @@ export function TeacherChatView() {
           </div>
         </div>
 
-        {/* Public Chat (Rightmost Panel) */}
+        {/* ▼▼▼ Public Chat (Rightmost Panel) - この中身を完全なものに修正 ▼▼▼ */}
         <div className="flex-1 flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-semibold">大部屋（クラス全体）</h2>
+          <div className="p-4 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-accent" />
+              <h2 className="font-semibold">大部屋（クラス全体）</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">クラス全体にお知らせを送信します</p>
           </div>
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-              {publicMessages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={{
-                    id: msg.id,
-                    content: msg.text,
-                    sender: 'teacher',
-                    timestamp: msg.createdAt.toDate(),
-                  }}
-                  currentUserRole="teacher"
-                  isOwnMessage={true}
-                  senderName="自分（先生）"
-                />
+          <ScrollArea className="flex-1 p-4" ref={publicScrollAreaRef}>
+            <div className="space-y-6">
+              {publicMessages.map((message) => (
+                <div key={message.id} className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-accent/10 rounded-full">
+                      <GraduationCap className="h-4 w-4 text-accent" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-medium text-sm">先生（あなた）</span>
+                        <span className="text-xs text-muted-foreground">
+                          {message.createdAt.toDate().toLocaleTimeString("ja-JP", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <div className="bg-card border border-border rounded-lg p-4">{message.text}</div>
+                    </div>
+                  </div>
+                  <Separator className="my-4" />
+                </div>
               ))}
             </div>
           </ScrollArea>
@@ -180,6 +220,7 @@ export function TeacherChatView() {
             </div>
           </div>
         </div>
+        {/* ▲▲▲ */}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { getStudentId } from "@/lib/auth"
-import { getClassroom, joinAsTeacher } from "@/lib/chat" // 👈 データベース操作関数をインポート
+import { getClassroom, joinAsTeacher } from "@/lib/chat"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,53 +16,73 @@ export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState<Role>(null)
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false) // 👈 ローディング状態を追加
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  // ▼▼▼ クラスルームに入る処理を、データベースと連携するように大幅に修正 ▼▼▼
   const handleEnterClassroom = async () => {
-    if (!selectedRole || !selectedClassroom) return
+    console.log("1. handleEnterClassroom が開始されました。");
 
-    setIsLoading(true)
-    setError(null)
+    if (!selectedRole || !selectedClassroom) {
+      console.log("2. ロールまたはクラスルームが選択されていません。処理を中断します。");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    console.log(`3. Stateを更新。isLoading: true, Role: ${selectedRole}, Classroom: ${selectedClassroom}`);
 
     try {
-      const classroomData = await getClassroom(selectedClassroom)
-      const teacherExists = classroomData && classroomData.teacherId
+      console.log("4. tryブロックに入りました。getClassroomを呼び出します。");
+      const classroomData = await getClassroom(selectedClassroom);
+      console.log("5. getClassroomからの戻り値:", classroomData);
 
-      let userId = ""
+      let userId = "";
 
       if (selectedRole === "teacher") {
-        if (teacherExists) {
-          setError("このクラスには既に他の先生がいます。")
-          setIsLoading(false)
-          return
-        }
-        // 先生として入室し、データベースを更新
-        userId = `teacher_for_${selectedClassroom}`
-        await joinAsTeacher(selectedClassroom, userId)
-      } else { // role is student
-        if (!teacherExists) {
-          setError("このクラスにはまだ先生がいません。")
-          setIsLoading(false)
-          return
-        }
-        userId = getStudentId()
-      }
+        console.log("6. 教師として入室処理を開始します。");
+        const teacherExists = classroomData && classroomData.teacherId;
+        console.log("7. 先生は存在しますか？:", teacherExists);
 
-      router.push(`/chat?role=${selectedRole}&classroom=${selectedClassroom}&id=${userId}`)
+        if (teacherExists) {
+          console.error("8. エラー: このクラスには既に他の先生がいます。");
+          setError("このクラスには既に他の先生がいます。");
+          setIsLoading(false);
+          return;
+        }
+        
+        userId = `teacher_for_${selectedClassroom}`;
+        console.log("9. joinAsTeacherを呼び出します。Classroom:", selectedClassroom, "TeacherID:", userId);
+        await joinAsTeacher(selectedClassroom, userId);
+        console.log("10. joinAsTeacherが成功しました。");
+
+      } else { // role is student
+        console.log("11. 生徒として入室処理を開始します。");
+        const teacherExists = classroomData && classroomData.teacherId;
+        console.log("12. 先生は存在しますか？:", teacherExists);
+
+        if (!teacherExists) {
+          console.error("13. エラー: このクラスにはまだ先生がいません。");
+          setError("このクラスにはまだ先生がいません。");
+          setIsLoading(false);
+          return;
+        }
+        userId = getStudentId();
+        console.log("14. 生徒IDを取得しました:", userId);
+      }
+      
+      const targetUrl = `/chat?role=${selectedRole}&classroom=${selectedClassroom}&id=${userId}`;
+      console.log("15. 全ての処理が成功しました。チャットページに遷移します:", targetUrl);
+      router.push(targetUrl);
 
     } catch (e) {
-      console.error("入室処理エラー:", e)
-      setError("エラーが発生しました。時間をおいて再度お試しください。")
-      setIsLoading(false)
+      console.error("16. catchブロックでエラーを捕捉しました:", e);
+      setError("エラーが発生しました。時間をおいて再度お試しください。");
+      setIsLoading(false);
     }
-  }
-  // ▲▲▲
-
-  const temporaryMemberCount = 28
+  };
 
   return (
+    // ... (JSX部分は変更なし) ...
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl space-y-8">
         {/* Header */}
@@ -96,7 +116,6 @@ export default function HomePage() {
                 >
                   <div className="text-2xl">クラス {classroom}</div>
                   <Badge variant="secondary" className="text-xs">
-                    {/* TODO: 将来的にFirebaseから取得する */}
                     - 名
                   </Badge>
                 </Button>
@@ -135,8 +154,7 @@ export default function HomePage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Enter Button */}
+        
         <div className="text-center space-y-4">
           {error && <p className="font-semibold text-red-500">{error}</p>}
           <Button
@@ -148,8 +166,7 @@ export default function HomePage() {
             {isLoading ? "入室処理中..." : "クラスルームに入る"}
           </Button>
         </div>
-
-        {/* Selection Summary */}
+        
         {(selectedRole || selectedClassroom) && (
           <Card className="bg-muted/30 border-border/30">
             <CardContent className="pt-6">

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { useChat } from "@/lib/chat-context"
+import { User } from "@/lib/chat-context"
 import { StudentChatView } from "@/components/chat/student-chat-view"
 import { TeacherChatView } from "@/components/chat/teacher-chat-view"
 import { Button } from "@/components/ui/button"
@@ -14,14 +14,19 @@ type Classroom = "A" | "B" | "C"
 
 export default function ChatPage() {
   const searchParams = useSearchParams()
-  const { currentUser, setCurrentUser } = useChat()
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
+    // currentUserが既に設定されている場合は、このeffectを再実行しないためのガード
+    if (currentUser) {
+      return;
+    }
+
     const role = searchParams.get("role") as Role | null;
     const classroom = searchParams.get("classroom") as Classroom | null;
     const userId = searchParams.get("id");
 
-    if (role && classroom && userId) { // 👈 currentUserのチェックを外す
+    if (role && classroom && userId) {
       // Contextにユーザー情報を設定
       setCurrentUser({
         id: userId,
@@ -31,7 +36,7 @@ export default function ChatPage() {
       // 在室管理システムを起動
       setUserOnline(classroom, role, userId);
     }
-  }, [searchParams, setCurrentUser]); // 👈 currentUserを依存配列から削除
+  }, [searchParams, currentUser, setCurrentUser]);
 
   // ▼▼▼ URLパラメータが不足している場合のエラー表示 ▼▼▼
   const role = searchParams.get("role")
@@ -65,8 +70,8 @@ export default function ChatPage() {
 
   // ユーザーの役割に応じて、表示するコンポーネントを切り替える
   if (currentUser.role === "teacher") {
-    return <TeacherChatView />
+    return <TeacherChatView currentUser={currentUser} />
   } else {
-    return <StudentChatView />
+    return <StudentChatView currentUser={currentUser} />
   }
 }

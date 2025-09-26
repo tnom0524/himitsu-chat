@@ -4,7 +4,6 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
-import { ChatProvider } from "@/lib/chat-context"
 import { ErrorBoundary } from "@/components/chat/error-boundary"
 import "./globals.css"
 
@@ -23,9 +22,7 @@ export default function RootLayout({
     <html lang="ja" className="dark">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <ErrorBoundary>
-          <ChatProvider>
-            <Suspense fallback={null}>{children}</Suspense>
-          </ChatProvider>
+          <Suspense fallback={null}>{children}</Suspense>
         </ErrorBoundary>
         <Analytics />
       </body>

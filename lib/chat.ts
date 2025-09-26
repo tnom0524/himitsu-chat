@@ -116,11 +116,6 @@ export const joinAsTeacher = async (classroomId: string, teacherId: string) => {
   });
 };
 
-export const leaveAsTeacher = async (classroomId: string) => {
-  const roomRef = doc(db, "classrooms", classroomId);
-  await updateDoc(roomRef, { teacherId: null });
-};
-
 /**
  * 特定のクラスルームの状態（先生の在室状況など）をリアルタイムで監視する関数
  * @param classroomId - クラスルームID

@@ -9,17 +9,16 @@ import {
   onClassroomStateChange, 
   Message 
 } from "@/lib/chat";
-import { useChat } from "@/lib/chat-context";
+import { User } from "@/lib/chat-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { MessageBubble } from "./message-bubble";
-import { ArrowLeft, Send, Users, MessageCircle, User, GraduationCap } from "lucide-react";
+import { ArrowLeft, Send, Users, MessageCircle, User as UserIcon, GraduationCap } from "lucide-react";
 
-export function StudentChatView() {
-  const { currentUser } = useChat();
+export function StudentChatView({ currentUser }: { currentUser: User }) {
   const router = useRouter();
   
   const [privateRoomId, setPrivateRoomId] = useState<string | null>(null);
@@ -110,7 +109,7 @@ export function StudentChatView() {
             </div>
           </div>
           <Badge variant="secondary" className="flex items-center gap-1">
-            <User className="h-3 w-3" />
+            <UserIcon className="h-3 w-3" />
             生徒
           </Badge>
         </div>

@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useChat, User } from "@/lib/chat-context";
-import { getOrCreatePrivateRoom, getPrivateRooms, getMessages, sendMessage, leaveAsTeacher, Message, PrivateRoomInfo } from "@/lib/chat";
+import { User } from "@/lib/chat-context";
+import { getDatabase, ref, remove } from "firebase/database";
+import { getAuth, signOut } from "firebase/auth";
+import { app } from "@/lib/firebase";
+import { getOrCreatePrivateRoom, getPrivateRooms, getMessages, sendMessage, Message, PrivateRoomInfo } from "@/lib/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,8 +15,7 @@ import { MessageBubble } from "./message-bubble";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-export function TeacherChatView() {
-  const { currentUser } = useChat();
+export function TeacherChatView({ currentUser }: { currentUser: User }) {
   const router = useRouter();
   
   const [privateRooms, setPrivateRooms] = useState<PrivateRoomInfo[]>([]);
@@ -89,8 +91,22 @@ export function TeacherChatView() {
 
   const handleLeaveRoom = async () => {
     if (currentUser) {
-      await leaveAsTeacher(currentUser.classroomId);
-      router.push("/");
+      const auth = getAuth(app);
+      if (auth.currentUser) {
+        const db = getDatabase();
+        // Realtime Databaseのキーは currentUser.id (例: teacher_for_A) を使用する
+        const userStatusRef = ref(db, `/status/${currentUser.classroomId}/${currentUser.id}`);
+        
+        // データベースからstatusを削除し、セッションからサインアウトする
+        await remove(userStatusRef);
+        await signOut(auth); 
+        
+        router.push("/");
+      } else {
+        // 念のため、サインアウトを試みる
+        await signOut(auth);
+        router.push("/");
+      }
     }
   };
 

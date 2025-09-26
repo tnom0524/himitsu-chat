@@ -28,9 +28,14 @@ async function deleteQueryBatch(
   }
 
   const batch = firestore.batch();
-  snapshot.docs.forEach((doc) => {
+  for (const doc of snapshot.docs) {
+    // サブコレクションを再帰的に削除
+    const subcollections = await doc.ref.listCollections();
+    for (const subcollection of subcollections) {
+      await deleteCollection(subcollection.path, 50);
+    }
     batch.delete(doc.ref);
-  });
+  }
   await batch.commit();
 
   process.nextTick(() => {
@@ -50,13 +55,20 @@ export const onUserStatusChanged = onValueDeleted(
 
     try {
       if (deletedUserData.role === "teacher") {
-        logger.info(`Teacher left classroom ${classroomId}. Deleting all rooms.`);
+        logger.info(`Teacher left classroom ${classroomId}. Deleting classroom and all sub-collections.`);
+        
+        // 1. roomsサブコレクションとその中のmessagesサブコレクションを再帰的に削除
         const roomsPath = `classrooms/${classroomId}/rooms`;
         await deleteCollection(roomsPath, 50);
-        await firestore.collection("classrooms").doc(classroomId).update({ teacherId: null });
+        logger.info(`Successfully deleted all rooms in classroom ${classroomId}.`);
+
+        // 2. クラスルームのドキュメント自体を削除
+        await firestore.collection("classrooms").doc(classroomId).delete();
+        logger.info(`Successfully deleted classroom document ${classroomId}.`);
 
       } else if (deletedUserData.role === "student") {
-        const studentId = deletedUserData.anonymousId;
+        // event.params.authUserId は Realtime Database のキーであり、学生の場合は anonymousId に相当する
+        const studentId = authUserId; 
         logger.info(`Student ${studentId} left classroom ${classroomId}. Deleting their private room.`);
         
         const teacherId = `teacher_for_${classroomId}`;

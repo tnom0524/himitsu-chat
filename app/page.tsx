@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { getDatabase, ref, get } from "firebase/database"
 import { getStudentId } from "@/lib/auth"
 import { getClassroom, joinAsTeacher } from "@/lib/chat"
 import { Button } from "@/components/ui/button"
@@ -39,8 +40,18 @@ export default function HomePage() {
       let userId = "";
 
       if (selectedRole === "teacher") {
-        console.log("6. 教師として入室処理を開始します。");
-        const teacherExists = classroomData && classroomData.teacherId;
+        console.log("6. 教師として入室処理を開始します。RTDBで在室状況を確認します。");
+        const db = getDatabase();
+        const statusRef = ref(db, `status/${selectedClassroom}`);
+        const statusSnapshot = await get(statusRef);
+        const activeUsers = statusSnapshot.val();
+        
+        let teacherExists = false;
+        if (activeUsers) {
+          // Realtime Databaseのキーは anonymousId または teacher_for_classroomId なので、
+          // そのキーの下の role フィールドを確認する
+          teacherExists = Object.values(activeUsers).some((user: any) => user.role === 'teacher');
+        }
         console.log("7. 先生は存在しますか？:", teacherExists);
 
         if (teacherExists) {
@@ -56,8 +67,16 @@ export default function HomePage() {
         console.log("10. joinAsTeacherが成功しました。");
 
       } else { // role is student
-        console.log("11. 生徒として入室処理を開始します。");
-        const teacherExists = classroomData && classroomData.teacherId;
+        console.log("11. 生徒として入室処理を開始します。RTDBで教師の在室状況を確認します。");
+        const db = getDatabase();
+        const statusRef = ref(db, `status/${selectedClassroom}`);
+        const statusSnapshot = await get(statusRef);
+        const activeUsers = statusSnapshot.val();
+        
+        let teacherExists = false;
+        if (activeUsers) {
+          teacherExists = Object.values(activeUsers).some((user: any) => user.role === 'teacher');
+        }
         console.log("12. 先生は存在しますか？:", teacherExists);
 
         if (!teacherExists) {

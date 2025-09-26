@@ -1,62 +1,51 @@
 import { getDatabase, ref, set, onDisconnect, serverTimestamp } from "firebase/database";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
-import { app } from "./firebase"; // 👈 firebase.tsからappをインポート
+import { getAuth, onAuthStateChanged, signInAnonymously, User as AuthUser } from "firebase/auth";
+import { app } from "./firebase";
 
-// Firebase SDKのインスタンスを取得
 const auth = getAuth(app);
 const rtDb = getDatabase(app);
 
-let currentUserId: string | null = null;
-let isAuthInitialized = false;
-
-// 匿名認証でユーザーIDを確保し、一度だけ実行されるようにする
-const initializeAuth = () => {
-  if (isAuthInitialized) return;
-  isAuthInitialized = true;
-
-  signInAnonymously(auth).catch((error) => {
-    console.error("Anonymous sign-in failed:", error);
-  });
-
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      currentUserId = user.uid;
-      console.log("Anonymous user signed in with UID:", currentUserId);
-    } else {
-      currentUserId = null;
-    }
-  });
+// 認証ユーザーをPromiseで管理し、一度だけ初期化する
+let authPromise: Promise<AuthUser | null> | null = null;
+const initializeAuth = (): Promise<AuthUser | null> => {
+  if (!authPromise) {
+    authPromise = new Promise((resolve) => {
+      signInAnonymously(auth).then(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          unsubscribe();
+          resolve(user);
+        });
+      }).catch(error => {
+        console.error("Anonymous sign-in failed:", error);
+        resolve(null);
+      });
+    });
+  }
+  return authPromise;
 };
 
-// アプリの初期化時に認証を開始
-initializeAuth();
-
 /**
- * ユーザーのオンライン状態を設定し、切断時の処理を予約する関数
- * @param classroomId クラスルームID
- * @param userRole ユーザーの役割
- * @param anonymousId ページ遷移で使っている匿名ID
+ * ユーザーのオンライン状態を設定し、切断時の処理を予約する
  */
-export const setUserOnline = (classroomId: string, userRole: 'student' | 'teacher', anonymousId: string) => {
-  // 認証が完了し、currentUserIdが取得できるまで待つ
-  const checkAuth = setInterval(() => {
-    if (currentUserId) {
-      clearInterval(checkAuth); // 待つのをやめる
-
-      const presenceRef = ref(rtDb, `status/${classroomId}/${currentUserId}`);
-      
-      const userData = {
-        isOnline: true,
-        role: userRole,
-        anonymousId: anonymousId,
-        lastChanged: serverTimestamp(),
-      };
-      
-      // ユーザーがオンラインであることを書き込む
-      set(presenceRef, userData);
-
-      // 接続が切れたら、このデータを自動で削除するように予約
-      onDisconnect(presenceRef).remove();
-    }
-  }, 100); // 100ミリ秒ごとに確認
+export const setUserOnline = async (classroomId: string, userRole: 'student' | 'teacher', anonymousId: string) => {
+  const user = await initializeAuth();
+  if (!user) {
+    console.error("Authentication failed. Cannot set user online.");
+    return;
+  }
+  const authUserId = user.uid; // 匿名認証の永続ID
+  
+  const presenceRef = ref(rtDb, `status/${classroomId}/${authUserId}`);
+  const userData = {
+    role: userRole,
+    anonymousId: anonymousId, // フロントで使うID
+    lastChanged: serverTimestamp(),
+  };
+  
+  try {
+    await onDisconnect(presenceRef).remove();
+    await set(presenceRef, userData);
+  } catch (error) {
+    console.error("Failed to set user online status:", error);
+  }
 };

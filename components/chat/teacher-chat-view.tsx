@@ -2,22 +2,22 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useChat } from "@/lib/chat-context";
-import { getPrivateRooms, getMessages, sendMessage, leaveAsTeacher, Message, PrivateRoomInfo } from "@/lib/chat";
+import { useChat, User } from "@/lib/chat-context";
+import { getOrCreatePrivateRoom, getPrivateRooms, getMessages, sendMessage, leaveAsTeacher, Message, PrivateRoomInfo } from "@/lib/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, LogOut, Users, MessageCircle } from "lucide-react";
+import { Send, LogOut, Users, MessageCircle, GraduationCap } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
-import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
-import { GraduationCap } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function TeacherChatView() {
   const { currentUser } = useChat();
   const router = useRouter();
   
   const [privateRooms, setPrivateRooms] = useState<PrivateRoomInfo[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   
   const [privateMessages, setPrivateMessages] = useState<Message[]>([]);
@@ -37,24 +37,32 @@ export function TeacherChatView() {
     }
   }, [currentUser]);
 
-  // 2. 最初に表示する小部屋を選択
+  // 2. 最初に表示する生徒を選択
   useEffect(() => {
-    if (privateRooms.length > 0 && !selectedRoomId) {
-      setSelectedRoomId(privateRooms[0].id);
+    if (privateRooms.length > 0 && !selectedStudentId) {
+      setSelectedStudentId(privateRooms[0].studentId);
     }
-  }, [privateRooms, selectedRoomId]);
+  }, [privateRooms, selectedStudentId]);
 
-  // 3. 選択された小部屋のメッセージをリアルタイムで取得
+  // 3. 選択された生徒との小部屋IDを取得または作成
   useEffect(() => {
-    if (selectedRoomId && currentUser?.classroomId) {
+    if (selectedStudentId && currentUser) {
+      getOrCreatePrivateRoom(currentUser.id, selectedStudentId, currentUser.classroomId)
+        .then(setSelectedRoomId);
+    }
+  }, [selectedStudentId, currentUser]);
+
+  // 4. 選択された部屋のメッセージをリアルタイムで取得
+  useEffect(() => {
+    if (selectedRoomId && currentUser) {
       const unsubscribe = getMessages(currentUser.classroomId, selectedRoomId, setPrivateMessages);
       return () => unsubscribe();
     } else {
       setPrivateMessages([]);
     }
-  }, [selectedRoomId, currentUser?.classroomId]);
+  }, [selectedRoomId, currentUser]);
 
-  // 4. 大部屋のメッセージをリアルタイムで取得
+  // 5. 大部屋のメッセージをリアルタイムで取得
   useEffect(() => {
     if (currentUser?.classroomId) {
       const largeRoomId = "large_room";
@@ -84,6 +92,11 @@ export function TeacherChatView() {
       await leaveAsTeacher(currentUser.classroomId);
       router.push("/");
     }
+  };
+
+  // 生徒選択処理
+  const handleSelectStudent = (studentId: string) => {
+    setSelectedStudentId(studentId);
   };
   
   // 自動スクロール処理
@@ -117,9 +130,9 @@ export function TeacherChatView() {
               key={room.id}
               className={cn(
                 "p-4 cursor-pointer border-b border-border hover:bg-muted",
-                selectedRoomId === room.id && "bg-muted"
+                selectedStudentId === room.studentId && "bg-muted"
               )}
-              onClick={() => setSelectedRoomId(room.id)}
+              onClick={() => handleSelectStudent(room.studentId)}
             >
               <p className="font-semibold">生徒 {room.studentId.substring(0, 8)}</p>
             </div>
@@ -135,7 +148,7 @@ export function TeacherChatView() {
         {/* Private Chat (Middle Panel) */}
         <div className="flex-1 border-r border-border flex flex-col">
           <div className="p-4 border-b border-border">
-            <h2 className="font-semibold">{selectedRoomId ? `生徒 ${selectedRoomId.substring(0, 8)} とのチャット` : "生徒を選択してください"}</h2>
+            <h2 className="font-semibold">{selectedStudentId ? `生徒 ${selectedStudentId.substring(0, 8)} とのチャット` : "生徒を選択してください"}</h2>
           </div>
           <ScrollArea className="flex-1 p-4" ref={privateScrollAreaRef}>
             <div className="space-y-4">
@@ -150,7 +163,7 @@ export function TeacherChatView() {
                   }}
                   currentUserRole="teacher"
                   isOwnMessage={msg.senderId === currentUser.id}
-                  senderName={msg.senderId === currentUser.id ? "自分" : `生徒 ${selectedRoomId?.substring(0, 8)}`}
+                  senderName={msg.senderId === currentUser.id ? "自分" : `生徒 ${selectedStudentId?.substring(0, 8)}`}
                 />
               ))}
             </div>
@@ -171,7 +184,7 @@ export function TeacherChatView() {
           </div>
         </div>
 
-        {/* ▼▼▼ Public Chat (Rightmost Panel) - この中身を完全なものに修正 ▼▼▼ */}
+        {/* Public Chat (Rightmost Panel) */}
         <div className="flex-1 flex flex-col">
           <div className="p-4 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
@@ -220,7 +233,6 @@ export function TeacherChatView() {
             </div>
           </div>
         </div>
-        {/* ▲▲▲ */}
       </div>
     </div>
   );

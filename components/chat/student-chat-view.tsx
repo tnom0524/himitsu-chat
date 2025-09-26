@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { getMessages, sendMessage, Message } from "@/lib/chat";
+import { useRouter } from "next/navigation";
+import { 
+  getOrCreatePrivateRoom, 
+  getMessages, 
+  sendMessage, 
+  onClassroomStateChange, 
+  Message 
+} from "@/lib/chat";
 import { useChat } from "@/lib/chat-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,53 +20,64 @@ import { ArrowLeft, Send, Users, MessageCircle, User, GraduationCap } from "luci
 
 export function StudentChatView() {
   const { currentUser } = useChat();
+  const router = useRouter();
+  
+  const [privateRoomId, setPrivateRoomId] = useState<string | null>(null);
   const [privateMessages, setPrivateMessages] = useState<Message[]>([]);
   const [publicMessages, setPublicMessages] = useState<Message[]>([]);
   const [newPrivateMessage, setNewPrivateMessage] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // 小部屋のメッセージをリアルタイムで取得
+  // 1. 先生が退出したことをリアルタイムで検知する
   useEffect(() => {
-    if (!currentUser) return;
+    if (currentUser) {
+      const unsubscribe = onClassroomStateChange(currentUser.classroomId, (classroomData) => {
+        if (!classroomData || !classroomData.teacherId) {
+          alert("先生が退出したため、クラスルームは終了しました。");
+          router.push('/');
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser, router]);
 
-    const smallRoomId = currentUser.id; // 小部屋のIDは生徒の匿名IDそのもの
-    const unsubscribe = getMessages(
-      currentUser.classroomId,
-      smallRoomId,
-      (messages) => setPrivateMessages(messages)
-    );
-    
-    return () => unsubscribe();
+  // 2. 小部屋のIDを取得または作成する
+  useEffect(() => {
+    if (currentUser) {
+      const teacherId = `teacher_for_${currentUser.classroomId}`;
+      getOrCreatePrivateRoom(currentUser.id, teacherId, currentUser.classroomId)
+        .then(setPrivateRoomId);
+    }
   }, [currentUser]);
 
-  // 大部屋のメッセージをリアルタイムで取得
+  // 3. 小部屋のメッセージをリアルタイムで取得
   useEffect(() => {
-    if (!currentUser) return;
-
-    const largeRoomId = "large_room";
-    const unsubscribe = getMessages(
-      currentUser.classroomId,
-      largeRoomId,
-      (messages) => setPublicMessages(messages)
-    );
-    
-    return () => unsubscribe();
+    if (currentUser && privateRoomId) {
+      const unsubscribe = getMessages(currentUser.classroomId, privateRoomId, setPrivateMessages);
+      return () => unsubscribe();
+    }
+  }, [currentUser, privateRoomId]);
+  
+  // 4. 大部屋のメッセージをリアルタイムで取得
+  useEffect(() => {
+    if (currentUser) {
+      const largeRoomId = "large_room";
+      const unsubscribe = getMessages(currentUser.classroomId, largeRoomId, setPublicMessages);
+      return () => unsubscribe();
+    }
   }, [currentUser]);
-
-  // 新しいメッセージが来たら一番下まで自動スクロール
+  
+  // 5. 新しいメッセージが来たら自動スクロール
   useEffect(() => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [privateMessages]);
 
+  // 6. メッセージ送信処理を修正
   const handleSendPrivateMessage = () => {
-    if (newPrivateMessage.trim() && currentUser) {
-      const smallRoomId = currentUser.id;
-      sendMessage(currentUser.classroomId, smallRoomId, newPrivateMessage, currentUser.id);
+    if (newPrivateMessage.trim() && currentUser && privateRoomId) {
+      sendMessage(currentUser.classroomId, privateRoomId, newPrivateMessage, currentUser.id);
       setNewPrivateMessage("");
     }
   };
@@ -74,7 +92,7 @@ export function StudentChatView() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Header (変更なし) */}
       <div className="border-b border-border bg-card">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-4">
@@ -137,8 +155,9 @@ export function StudentChatView() {
                 onChange={(e) => setNewPrivateMessage(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSendPrivateMessage()}
                 className="flex-1"
+                disabled={!privateRoomId}
               />
-              <Button onClick={handleSendPrivateMessage} disabled={!newPrivateMessage.trim()}>
+              <Button onClick={handleSendPrivateMessage} disabled={!newPrivateMessage.trim() || !privateRoomId}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>

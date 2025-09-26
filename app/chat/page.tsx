@@ -7,6 +7,7 @@ import { StudentChatView } from "@/components/chat/student-chat-view"
 import { TeacherChatView } from "@/components/chat/teacher-chat-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { setUserOnline } from "@/lib/presence";
 
 type Role = "student" | "teacher"
 type Classroom = "A" | "B" | "C"
@@ -15,23 +16,22 @@ export default function ChatPage() {
   const searchParams = useSearchParams()
   const { currentUser, setCurrentUser } = useChat()
 
-  // ▼▼▼ URLパラメータからユーザー情報を取得し、Contextに設定する処理 ▼▼▼
   useEffect(() => {
-    const role = searchParams.get("role") as Role | null
-    const classroom = searchParams.get("classroom") as Classroom | null
-    const userId = searchParams.get("id") // 匿名IDを取得
+    const role = searchParams.get("role") as Role | null;
+    const classroom = searchParams.get("classroom") as Classroom | null;
+    const userId = searchParams.get("id");
 
-    // 必要な情報が揃っており、かつユーザーがまだ設定されていない場合のみ実行
-    if (role && classroom && userId && !currentUser) {
+    if (role && classroom && userId) { // 👈 currentUserのチェックを外す
+      // Contextにユーザー情報を設定
       setCurrentUser({
         id: userId,
-        // nameプロパティは不要になったので削除
         role,
-        classroomId: classroom, // 正しいプロパティ名に設定
-      })
+        classroomId: classroom,
+      });
+      // 在室管理システムを起動
+      setUserOnline(classroom, role, userId);
     }
-  }, [searchParams, currentUser, setCurrentUser]) // 依存配列
-  // ▲▲▲
+  }, [searchParams, setCurrentUser]); // 👈 currentUserを依存配列から削除
 
   // ▼▼▼ URLパラメータが不足している場合のエラー表示 ▼▼▼
   const role = searchParams.get("role")

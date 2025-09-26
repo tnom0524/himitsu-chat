@@ -15,7 +15,7 @@ const firebaseConfig = {
 
 // アプリケーションが既に初期化されていない場合のみ、Firebaseを初期化します。
 // これにより、ページの再読み込みなどで複数回初期化が実行されるのを防ぎます。
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+export const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
 // Firestoreデータベースへの参照を取得し、他のファイルで使えるようにエクスポートします。
 export const db = getFirestore(app);

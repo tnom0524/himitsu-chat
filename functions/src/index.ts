@@ -7,39 +7,35 @@ admin.initializeApp();
 const firestore = admin.firestore();
 
 // コレクションを再帰的に削除する、より堅牢なヘルパー関数
+// コレクションを再帰的に削除する、より堅牢なヘルパー関数
 async function deleteCollection(collectionPath: string, batchSize: number) {
   const collectionRef = firestore.collection(collectionPath);
-  const query = collectionRef.orderBy("__name__").limit(batchSize);
+  let query = collectionRef.orderBy("__name__").limit(batchSize);
 
-  return new Promise((resolve, reject) => {
-    deleteQueryBatch(query, resolve).catch(reject);
-  });
-}
+  return new Promise<void>(async (resolve, reject) => {
+    try {
+      let snapshot = await query.get();
+      while (snapshot.size > 0) {
+        const batch = firestore.batch();
+        for (const doc of snapshot.docs) {
+          // サブコレクションを再帰的に削除
+          const subcollections = await doc.ref.listCollections();
+          for (const subcollection of subcollections) {
+            await deleteCollection(subcollection.path, 50); // 再帰呼び出し
+          }
+          batch.delete(doc.ref);
+        }
+        await batch.commit();
 
-async function deleteQueryBatch(
-  query: admin.firestore.Query,
-  resolve: (value: unknown) => void
-) {
-  const snapshot = await query.get();
-
-  if (snapshot.size === 0) {
-    resolve(0);
-    return;
-  }
-
-  const batch = firestore.batch();
-  for (const doc of snapshot.docs) {
-    // サブコレクションを再帰的に削除
-    const subcollections = await doc.ref.listCollections();
-    for (const subcollection of subcollections) {
-      await deleteCollection(subcollection.path, 50);
+        // 次のバッチのためにクエリを更新
+        const lastVisible = snapshot.docs[snapshot.docs.length - 1];
+        query = collectionRef.orderBy("__name__").startAfter(lastVisible).limit(batchSize);
+        snapshot = await query.get();
+      }
+      resolve();
+    } catch (error) {
+      reject(error);
     }
-    batch.delete(doc.ref);
-  }
-  await batch.commit();
-
-  process.nextTick(() => {
-    deleteQueryBatch(query, resolve);
   });
 }
 
@@ -65,6 +61,11 @@ export const onUserStatusChanged = onValueDeleted(
         // 2. クラスルームのドキュメント自体を削除
         await firestore.collection("classrooms").doc(classroomId).delete();
         logger.info(`Successfully deleted classroom document ${classroomId}.`);
+
+        // 3. Realtime Databaseのクラスルームのstatusを全て削除
+        const rtDbClassroomStatusRef = admin.database().ref(`status/${classroomId}`);
+        await rtDbClassroomStatusRef.remove();
+        logger.info(`Successfully deleted all status entries for classroom ${classroomId} in Realtime Database.`);
 
       } else if (deletedUserData.role === "student") {
         // event.params.authUserId は Realtime Database のキーであり、学生の場合は anonymousId に相当する

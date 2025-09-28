@@ -1,24 +1,68 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getDatabase, ref, get } from "firebase/database"
+import { getDatabase, ref, get, onValue, off } from "firebase/database" // onValueとoffを追加
 import { getStudentId } from "@/lib/auth"
 import { getClassroom, joinAsTeacher } from "@/lib/chat"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Users, GraduationCap, MessageCircle } from "lucide-react"
+import { cn } from "@/lib/utils" // cnユーティリティを追加
 
 type Role = "student" | "teacher" | null
-type Classroom = "A" | "B" | "C" | null
+type ClassroomId = "A" | "B" | "C" // ClassroomIdを定義
+
+// 各クラスルームの在室状況を保持する型
+interface ClassroomStatus {
+  totalUsers: number;
+  teacherPresent: boolean;
+}
 
 export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState<Role>(null)
-  const [selectedClassroom, setSelectedClassroom] = useState<Classroom>(null)
+  const [selectedClassroom, setSelectedClassroom] = useState<ClassroomId | null>(null) // ClassroomIdを使用
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [classroomStatuses, setClassroomStatuses] = useState<Record<ClassroomId, ClassroomStatus>>({ // ClassroomIdを使用
+    A: { totalUsers: 0, teacherPresent: false },
+    B: { totalUsers: 0, teacherPresent: false },
+    C: { totalUsers: 0, teacherPresent: false },
+  });
   const router = useRouter()
+  const db = getDatabase(); // Firebase Realtime Databaseのインスタンスを取得
+
+  useEffect(() => {
+    const classroomIds: ClassroomId[] = ["A", "B", "C"]; // ClassroomIdを使用
+    const unsubscribeFunctions: (() => void)[] = [];
+
+    classroomIds.forEach((classroomId) => {
+      const statusRef = ref(db, `status/${classroomId}`);
+      const unsubscribe = onValue(statusRef, (snapshot) => {
+        const activeUsers = snapshot.val();
+        let totalUsers = 0;
+        let teacherPresent = false;
+
+        if (activeUsers) {
+          const usersArray = Object.values(activeUsers) as { role: Role }[];
+          totalUsers = usersArray.length;
+          teacherPresent = usersArray.some((user) => user.role === "teacher");
+        }
+
+        setClassroomStatuses((prevStatuses) => ({
+          ...prevStatuses,
+          [classroomId]: { totalUsers, teacherPresent },
+        }));
+      });
+      unsubscribeFunctions.push(unsubscribe);
+    });
+
+    // コンポーネントのアンマウント時に購読を解除
+    return () => {
+      unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [db]); // dbインスタンスは変更されないので依存配列はこれでOK
 
   const handleEnterClassroom = async () => {
     console.log("1. handleEnterClassroom が開始されました。");
@@ -41,7 +85,7 @@ export default function HomePage() {
 
       if (selectedRole === "teacher") {
         console.log("6. 教師として入室処理を開始します。RTDBで在室状況を確認します。");
-        const db = getDatabase();
+        // const db = getDatabase(); // 既に上で取得済み
         const statusRef = ref(db, `status/${selectedClassroom}`);
         const statusSnapshot = await get(statusRef);
         const activeUsers = statusSnapshot.val();
@@ -68,7 +112,7 @@ export default function HomePage() {
 
       } else { // role is student
         console.log("11. 生徒として入室処理を開始します。RTDBで教師の在室状況を確認します。");
-        const db = getDatabase();
+        // const db = getDatabase(); // 既に上で取得済み
         const statusRef = ref(db, `status/${selectedClassroom}`);
         const statusSnapshot = await get(statusRef);
         const activeUsers = statusSnapshot.val();
@@ -101,7 +145,6 @@ export default function HomePage() {
   };
 
   return (
-    // ... (JSX部分は変更なし) ...
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl space-y-8">
         {/* Header */}
@@ -126,19 +169,28 @@ export default function HomePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
-              {(["A", "B", "C"] as const).map((classroom) => (
-                <Button
-                  key={classroom}
-                  variant={selectedClassroom === classroom ? "default" : "outline"}
-                  className="h-20 flex flex-col gap-2 text-lg font-semibold"
-                  onClick={() => setSelectedClassroom(classroom)}
-                >
-                  <div className="text-2xl">クラス {classroom}</div>
-                  <Badge variant="secondary" className="text-xs">
-                    - 名
-                  </Badge>
-                </Button>
-              ))}
+              {(["A", "B", "C"] as const).map((classroom) => {
+                const status = classroomStatuses[classroom];
+                const isTeacherPresent = status?.teacherPresent;
+                const totalUsers = status?.totalUsers || 0;
+
+                return (
+                  <Button
+                    key={classroom}
+                    variant={selectedClassroom === classroom ? "default" : "outline"}
+                    className={cn(
+                      "h-20 flex flex-col gap-2 text-lg font-semibold",
+                      !isTeacherPresent && "opacity-50" // 教師がいない場合は濃淡を薄くする
+                    )}
+                    onClick={() => setSelectedClassroom(classroom)}
+                  >
+                    <div className="text-2xl">クラス {classroom}</div>
+                    <Badge variant="secondary" className="text-xs">
+                      {totalUsers} 名
+                    </Badge>
+                  </Button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

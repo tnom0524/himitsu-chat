@@ -5,9 +5,9 @@
 
 :root {
   /* Updated theme to match dark professional education design */
-  --background: oklch(0.08 0 0);
+  --background: oklch(1 0.04 220); /* 明度をさらに上げ、青緑を強調 */
   --foreground: oklch(0.98 0 0);
-  --card: oklch(0.12 0 0);
+  --card: oklch(0.12 0 0); /* 元の値に戻す */
   --card-foreground: oklch(0.98 0 0);
   --popover: oklch(0.12 0 0);
   --popover-foreground: oklch(0.98 0 0);
@@ -24,6 +24,7 @@
   --border: oklch(0.25 0 0);
   --input: oklch(0.18 0 0);
   --ring: oklch(0.65 0.2 240);
+  --button-outline-background: oklch(0.2 0 0);
   --chart-1: oklch(0.65 0.2 240);
   --chart-2: oklch(0.55 0.15 160);
   --chart-3: oklch(0.6 0.2 20);
@@ -41,9 +42,15 @@
 }
 
 .dark {
-  --background: oklch(0.08 0 0);
+  --background: oklch(0.25 0.04 220); /* 明度をさらに高く調整 */
   --foreground: oklch(0.98 0 0);
-  --card: oklch(0.12 0 0);
+  --card: oklch(0.20 0 0); /* カードの明度を少し上げる */
+  --background: oklch(0.25 0.04 220); /* 明度をさらに高く調整 */
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.20 0 0); /* カードの明度を少し上げる */
+  --background: oklch(0.17 0.04 220); /* 明度をさらに高く調整 */
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.12 0 0); /* 元の値に戻す */
   --card-foreground: oklch(0.98 0 0);
   --popover: oklch(0.12 0 0);
   --popover-foreground: oklch(0.98 0 0);
@@ -60,6 +67,7 @@
   --border: oklch(0.25 0 0);
   --input: oklch(0.18 0 0);
   --ring: oklch(0.65 0.2 240);
+  --button-outline-background: oklch(0.2 0 0);
   --chart-1: oklch(0.65 0.2 240);
   --chart-2: oklch(0.55 0.15 160);
   --chart-3: oklch(0.6 0.2 20);

@@ -15,6 +15,9 @@ export interface Message {
 export interface PrivateRoomInfo {
   id: string;
   studentId: string;
+  lastMessage?: string;
+  lastMessageTimestamp?: Timestamp;
+  unreadCount?: number;
 }
 
 // ▼▼▼ この関数が抜けていたため、追加します ▼▼▼
@@ -36,9 +39,14 @@ export const getOrCreatePrivateRoom = async (user1Id: string, user2Id: string, c
 
   if (!roomSnap.exists()) {
     // ルームが存在しない場合は、新しく作成する
+    // lastMessageTimestampでソートしているため、ドキュメント作成時にこのフィールドを初期化しておく必要がある
+    const now = Timestamp.now();
     await setDoc(roomRef, {
       members: members,
-      createdAt: Timestamp.now(),
+      createdAt: now,
+      lastMessage: "",
+      lastMessageTimestamp: now,
+      unreadCount: 0,
     });
   }
   return roomId;
@@ -71,21 +79,28 @@ export const getPrivateRooms = (
   callback: (rooms: PrivateRoomInfo[]) => void
 ) => {
   const roomsRef = collection(db, "classrooms", classroomId, "rooms");
-  // where("members", "array-contains-any", [currentUser.id])のようなロジックが理想だが、
-  // 匿名設計のため、ここでは__name__ != "large_room" を使う
-  const q = query(roomsRef, where("__name__", "!=", "large_room"));
+  const q = query(
+    roomsRef,
+    where("__name__", "!=", "large_room"),
+    orderBy("lastMessageTimestamp", "desc")
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const rooms: PrivateRoomInfo[] = [];
     snapshot.forEach((doc) => {
-      // ドキュメントが存在する場合のみリストに追加
       if (doc.exists()) {
-        const members = doc.data().members;
-        // membersフィールドがあり、配列であることを確認
+        const data = doc.data();
+        const members = data.members;
         if (Array.isArray(members)) {
           const studentId = members.find((id: string) => !id.startsWith('teacher_'));
           if (studentId) {
-            rooms.push({ id: doc.id, studentId: studentId });
+            rooms.push({
+              id: doc.id,
+              studentId: studentId,
+              lastMessage: data.lastMessage,
+              lastMessageTimestamp: data.lastMessageTimestamp,
+              unreadCount: data.unreadCount,
+            });
           }
         }
       }
@@ -94,6 +109,17 @@ export const getPrivateRooms = (
   });
 
   return unsubscribe;
+};
+
+export const markRoomAsRead = async (classroomId: string, roomId: string) => {
+  const roomRef = doc(db, "classrooms", classroomId, "rooms", roomId);
+  try {
+    await updateDoc(roomRef, {
+      unreadCount: 0,
+    });
+  } catch (error) {
+    console.error("Error marking room as read:", error);
+  }
 };
 // getClassroom, joinAsTeacher, leaveAsTeacher (変更なし)
 export const getClassroom = async (classroomId: string) => {

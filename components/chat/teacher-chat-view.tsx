@@ -6,8 +6,9 @@ import { User } from "@/lib/chat-context";
 import { getDatabase, ref, remove } from "firebase/database";
 import { getAuth, signOut } from "firebase/auth";
 import { app } from "@/lib/firebase";
-import { getOrCreatePrivateRoom, getPrivateRooms, getMessages, sendMessage, Message, PrivateRoomInfo } from "@/lib/chat";
+import { getOrCreatePrivateRoom, getPrivateRooms, getMessages, sendMessage, Message, PrivateRoomInfo, markRoomAsRead } from "@/lib/chat";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, LogOut, Users, MessageCircle, GraduationCap } from "lucide-react";
@@ -111,8 +112,12 @@ export function TeacherChatView({ currentUser }: { currentUser: User }) {
   };
 
   // 生徒選択処理
-  const handleSelectStudent = (studentId: string) => {
+  const handleSelectStudent = (studentId: string, roomId: string) => {
     setSelectedStudentId(studentId);
+    // 部屋を選択したときに既読にする
+    if (currentUser?.classroomId) {
+      markRoomAsRead(currentUser.classroomId, roomId);
+    }
   };
   
   // 自動スクロール処理
@@ -148,9 +153,17 @@ export function TeacherChatView({ currentUser }: { currentUser: User }) {
                 "p-4 cursor-pointer border-b border-border hover:bg-muted",
                 selectedStudentId === room.studentId && "bg-muted"
               )}
-              onClick={() => handleSelectStudent(room.studentId)}
+              onClick={() => handleSelectStudent(room.studentId, room.id)}
             >
-              <p className="font-semibold">生徒 {room.studentId.substring(0, 8)}</p>
+              <div className="flex justify-between items-center">
+                <p className="font-semibold">生徒 {room.studentId.substring(0, 8)}</p>
+                {room.unreadCount && room.unreadCount > 0 && (
+                  <Badge variant="destructive">{room.unreadCount}</Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground truncate">
+                {room.lastMessage || "まだメッセージはありません"}
+              </p>
             </div>
           ))}
           {privateRooms.length === 0 && (

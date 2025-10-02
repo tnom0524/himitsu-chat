@@ -1,6 +1,8 @@
 import { onValueDeleted } from "firebase-functions/v2/database";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { DatabaseEvent, DataSnapshot } from "firebase-functions/v2/database";
 
 admin.initializeApp();
@@ -81,6 +83,52 @@ export const onUserStatusChanged = onValueDeleted(
       }
     } catch (error) {
       logger.error(`Cleanup failed for user ${authUserId} in classroom ${classroomId}:`, error);
+    }
+  }
+);
+
+export const updateRoomOnNewMessage = onDocumentCreated(
+  "classrooms/{classroomId}/rooms/{roomId}/messages/{messageId}",
+  async (event) => {
+    const { classroomId, roomId } = event.params;
+    const messageData = event.data?.data();
+
+    if (!messageData) {
+      logger.info("No message data found, exiting function.");
+      return;
+    }
+
+    // 大部屋のメッセージは処理対象外
+    if (roomId === "large_room") {
+      logger.info("Message in large_room, skipping room update.");
+      return;
+    }
+
+    // 教師からのメッセージの場合は、未読カウントを増やさず、ルーム情報も更新しない
+    const senderId = messageData.senderId;
+    if (senderId.startsWith("teacher_")) {
+      logger.info(`Message from teacher ${senderId}, skipping room update.`);
+      return;
+    }
+
+    // 対応するルームドキュメントを更新
+    const roomRef = firestore
+      .collection("classrooms")
+      .doc(classroomId)
+      .collection("rooms")
+      .doc(roomId);
+
+    try {
+      // increment() を使ってアトミックに未読件数を増やす
+      await roomRef.update({
+        lastMessage: messageData.text,
+        lastMessageTimestamp: messageData.createdAt,
+        unreadCount: FieldValue.increment(1),
+      });
+      logger.info(`Successfully updated room ${roomId} with new message info.`);
+    } catch (error) {
+      // ドキュメントが存在しない場合も考慮（基本的には存在するはず）
+      logger.error(`Failed to update room ${roomId}:`, error);
     }
   }
 );
